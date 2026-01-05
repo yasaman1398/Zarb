@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+<meta charset="UTF-8">
+<title>قهرمانان ضرب</title>
+<style>
+body { font-family:"Tahoma",sans-serif; background:linear-gradient(#74ebd5,#ACB6E5); direction:rtl; margin:0; text-align:center; }
+.container { max-width:680px; margin:25px auto; background:#fff; border-radius:25px; padding:25px; box-shadow:0 0 18px rgba(0,0,0,0.25); }
+h1 { color:#2c3e50; }
+.hidden { display:none; }
+
+.stages { display:grid; grid-template-columns:repeat(2,1fr); gap:15px; margin-top:20px; }
+.stage-btn { padding:18px; font-size:18px; border-radius:18px; border:none; cursor:pointer; background:#ffeaa7; box-shadow:0 6px 0 #e1b12c; }
+.stage-btn:hover { transform:scale(1.05); }
+.stage-locked { background:#dfe6e9 !important; box-shadow:none; color:#636e72; cursor:not-allowed; }
+.stage-done { background:#b8f7d4 !important; }
+.medal { display:block; font-size:22px; margin-top:6px; }
+
+.reset-btn{
+  margin-top:25px;
+  padding:14px 30px;
+  font-size:18px;
+  border-radius:16px;
+  border:none;
+  cursor:pointer;
+  background:#ff7675;
+  color:white;
+  box-shadow:0 5px 0 #d63031;
+}
+.reset-btn:active{
+  transform:translateY(3px);
+  box-shadow:0 2px 0 #b71c1c;
+}
+
+#question { font-size:32px; margin:20px 0; }
+.answers button { width:45%; padding:16px; margin:8px; font-size:22px; border-radius:18px; border:none; cursor:pointer; background:#ffeaa7; box-shadow:0 6px 0 #e1b12c; }
+.answers button:active { transform:translateY(4px); box-shadow:0 2px 0 #caa100; }
+.correct { background:#55efc4 !important; animation:pop 0.4s; }
+.wrong { background:#ff7675 !important; animation:shake 0.4s; }
+@keyframes pop {0%{transform:scale(1);}50%{transform:scale(1.25);}100%{transform:scale(1);}}
+@keyframes shake {0%{transform:translateX(0);}25%{transform:translateX(-6px);}50%{transform:translateX(6px);}75%{transform:translateX(-6px);}100%{transform:translateX(0);}}
+#message { font-size:22px; min-height:50px; }
+#progress { font-size:18px; margin-top:6px; }
+.back-btn { margin-top:20px; padding:14px 30px; font-size:18px; border-radius:15px; border:none; cursor:pointer; background:#74b9ff; color:white; }
+.cheer { animation:pop 0.5s; }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<div id="stageMenu">
+<h1>🏆 به بازی قهرمانان ضرب خوش اومدی 😍  
+برای شروع، مرحله مورد نظرت رو انتخاب کن 👌🏻  
+ببینم چه مدالی می‌تونی بگیری؟ 💪</h1>
+
+<div class="stages" id="stageButtons"></div>
+
+<button class="reset-btn" onclick="resetGame()">🔄 ریست بازی</button>
+</div>
+
+<div id="game" class="hidden">
+<h1 id="stageTitle"></h1>
+<div id="question"></div>
+
+<div class="answers">
+<button onclick="checkAnswer(0)"></button>
+<button onclick="checkAnswer(1)"></button><br>
+<button onclick="checkAnswer(2)"></button>
+<button onclick="checkAnswer(3)"></button>
+</div>
+
+<div id="message"></div>
+<div id="progress"></div>
+
+<button class="back-btn" onclick="backToMenu()">⬅ بازگشت</button>
+</div>
+
+</div>
+
+<script>
+const TOTAL_STAGES = 10;
+let data = { unlocked: 1, results: {} };
+let currentStage = 1, remaining = [], mistakes = 0;
+let currentMultiplier = 1, correctAnswer = 0;
+
+function loadData(){
+  const saved = localStorage.getItem("zarb_final");
+  if(saved) data = JSON.parse(saved);
+}
+
+function saveData(){
+  localStorage.setItem("zarb_final", JSON.stringify(data));
+}
+
+function renderStages(){
+  const box = document.getElementById("stageButtons");
+  box.innerHTML = "";
+  for(let i=1;i<=TOTAL_STAGES;i++){
+    const btn = document.createElement("button");
+    btn.className = "stage-btn";
+    if(i > data.unlocked){
+      btn.classList.add("stage-locked");
+      btn.textContent = `ضرب ${i} 🔒`;
+    } else {
+      btn.textContent = `ضرب ${i}`;
+      btn.onclick = ()=>startStage(i);
+      if(data.results[i]){
+        btn.classList.add("stage-done");
+        const medal = document.createElement("span");
+        medal.className = "medal";
+        medal.textContent = medalIcon(data.results[i].stars);
+        btn.appendChild(medal);
+      }
+    }
+    box.appendChild(btn);
+  }
+}
+
+function medalIcon(stars){
+  if(stars===3) return "🥇⭐⭐⭐";
+  if(stars===2) return "🥈⭐⭐";
+  return "🥉⭐";
+}
+
+function startStage(stage){
+  currentStage = stage;
+  remaining = [1,2,3,4,5,6,7,8,9,10];
+  mistakes = 0;
+  document.getElementById("message").innerHTML = "";
+  document.getElementById("stageMenu").classList.add("hidden");
+  document.getElementById("game").classList.remove("hidden");
+  document.getElementById("stageTitle").innerText = `مرحله ضرب ${stage}`;
+  nextQuestion();
+}
+
+function nextQuestion(){
+  if(remaining.length === 0){ finishStage(); return; }
+  resetButtons();
+  document.getElementById("message").innerHTML = "";
+
+  const idx = Math.floor(Math.random()*remaining.length);
+  currentMultiplier = remaining[idx];
+  correctAnswer = currentStage * currentMultiplier;
+
+  document.getElementById("question").innerText =
+    `❓ ${currentStage} × ${currentMultiplier} = ؟`;
+
+  let answers = [correctAnswer];
+  while(answers.length < 4){
+    let n = Math.floor(Math.random()*100)+1;
+    if(!answers.includes(n)) answers.push(n);
+  }
+  shuffle(answers);
+  document.querySelectorAll(".answers button")
+    .forEach((btn,i)=>btn.innerText = answers[i]);
+
+  updateProgress();
+}
+
+function checkAnswer(index){
+  const buttons = document.querySelectorAll(".answers button");
+  const chosen = parseInt(buttons[index].innerText);
+  resetButtons();
+
+  if(chosen === correctAnswer){
+    buttons[index].classList.add("correct");
+    document.getElementById("message").innerHTML =
+      "<div class='cheer'>🌟 آفرین! درست جواب دادی 🌟</div>";
+    remaining = remaining.filter(x=>x!==currentMultiplier);
+  } else {
+    buttons[index].classList.add("wrong");
+    document.getElementById("message").innerHTML =
+      "<div class='cheer'>😅 دوباره امتحان کن</div>";
+    mistakes++;
+  }
+  setTimeout(nextQuestion,900);
+}
+
+function finishStage(){
+  let stars = mistakes===0 ? 3 : mistakes<=2 ? 2 : 1;
+
+  document.getElementById("question").innerHTML =
+    `🎉 مرحله تمام شد!<br>ستاره‌ها: ${"⭐".repeat(stars)}`;
+
+  let msg = stars===3 ?
+    "آفرین! همه رو درست جواب دادی و طلا گرفتی 🥇😍" :
+    stars===2 ?
+    "آفرین! کمی اشتباه داشتی و نقره گرفتی 😍🥈" :
+    "آفرین! به خاطر اشتباهاتت برنز گرفتی 😍🥉";
+
+  document.getElementById("message").innerHTML =
+    `<div class='cheer'>${msg}</div>`;
+
+  if(!data.results[currentStage] || stars > data.results[currentStage].stars){
+    data.results[currentStage] = { stars };
+  }
+
+  if(currentStage === data.unlocked && data.unlocked < TOTAL_STAGES){
+    data.unlocked++;
+    renderStages();
+  }
+  saveData();
+}
+
+function updateProgress(){
+  document.getElementById("progress").innerText =
+    `ضرب‌های باقی‌مانده: ${remaining.length} از 10`;
+}
+
+function resetButtons(){
+  document.querySelectorAll(".answers button")
+    .forEach(btn=>btn.classList.remove("correct","wrong"));
+}
+
+function shuffle(arr){
+  for(let i=arr.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]]=[arr[j],arr[i]];
+  }
+}
+
+function backToMenu(){
+  document.getElementById("game").classList.add("hidden");
+  document.getElementById("stageMenu").classList.remove("hidden");
+  renderStages();
+}
+
+function resetGame(){
+  if(!confirm("همه مراحل و مدال‌ها پاک می‌شوند.\nمطمئنی؟")) return;
+  localStorage.removeItem("zarb_final");
+  data = { unlocked:1, results:{} };
+  renderStages();
+}
+
+loadData();
+renderStages();
+</script>
+
+</body>
+</html>
